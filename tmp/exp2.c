@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
 
 #include <pigpiod_if2.h>
 
@@ -18,6 +20,7 @@
 #define Bt 19
 
 #define LOOPCOUNT 10
+#define BOUNCE_TIME 2000  // micro sec
 
 void init(int pd){
 	set_mode(pd, Pa, PI_OUTPUT);
@@ -29,6 +32,12 @@ void init(int pd){
 	set_mode(pd, Pg, PI_OUTPUT);
 	set_mode(pd, Pdp, PI_OUTPUT);
 	set_mode(pd, Bt, PI_INPUT);
+}
+
+uint64_t current_time_us(){
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000L + ts.tv_nsec / 1000;
 }
 
 void control_number(int pd, int num){
@@ -140,8 +149,9 @@ void control_number(int pd, int num){
 }
 
 
+
 int main(){
-	int pd,t;
+	int pd;
 	pd = pigpio_start(NULL, NULL);
 	init(pd);
 
@@ -150,37 +160,25 @@ int main(){
 		exit(EXIT_FAILURE);
 	}
 
-	printf("====\n");
-	t = 0;
-	int last_0 = 0;
-	int i = 0;
+	int last_state = HIGH;
+	int count = 0;
+	uint64_t last_time = current_time_us();
 	while (1){
-		if (gpio_read(pd, Bt)) {
-			int cnt = 0;
-			while (cnt < 30){
-				if (gpio_read(pd, Bt) == 0){
-					cnt++;
-				} else {
-					cnt = 0;
-				}
-			}
-			i++;
-			printf("%d\n", i);
-			time_sleep(0.01);
-		} 
-		// if (gpio_read(pd, Bt) == 1 && last_0){
-		// 	i++;
-		// 	last_0 = 0;
-		// 	printf("%d\n", i);
-		// 	// time_sleep(0.1);
-		// } else if (gpio_read(pd, Bt) == 0){
-		// 	last_0 = 1;
-		// } else{
-		//        	last_0 = 0;
-		// }
-		control_number(pd, i % 10);
-	}
+		int current_state = gpio_read(pd, Bt);
+		uint32_t current_time = current_time_us();
+		// printf("current: %d, last: %d\n", current_state, last_state);
 
+		if (current_state == LOW && last_state == HIGH){
+			if ((current_time - last_time) > BOUNCE_TIME){
+				count++;
+				printf("%d\n", count);
+				last_time = current_time;
+			}
+		}
+		last_state = current_state;
+		control_number(pd, count % 10);
+		usleep(1000);
+	}
 	pigpio_stop(pd);
 	return 0;
 }
