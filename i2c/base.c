@@ -76,137 +76,137 @@ int get_raw_temp(int pd, int fd);
 int check_bmp180_function(int pd, int fd);
 int *read_caldata(int pd, int fd, int *caldata);
 int main() {
-  int pd; // pigpiod に接続したときの接続番号、クライアントの識別番号
-  int fd; // ハンドル値、I2C デバイスごとにつく識別番号
-  int oss = 1; // 気圧標準測定（2 回サンプリング平均）
-  int caldata[CALDATANUM]; // 補正データを格納する配列
-  int ut, up; // 生の温度・圧力値（ADC の変換結果そのもの）
-  int t, p;   // 補正した後の温度・圧力値
-  // 最初にpigpiod に接続する（NULL: localhost, NULL: default port）
-  pd = pigpio_start(NULL, NULL);
-  if (pd < 0) {
-    printf("pigpiod の接続に失敗しました。¥n");
-    printf("pigpiod が起動しているかどうか確認して下さい。¥n");
-    printf(" 毎回手動で起動する方法：sudo pigpiod¥n");
-printf(" 自動的に起動させる方法：sudo systemctl enable pigpiod.service;
-reboot");
-exit(EXIT_FAILURE);
-  }
-  // I2C インタフェースの初期化
-  fd = i2c_open(pd, I2CBUS, BMP180ADDR, 0);
-  if (fd < 0) {
-    printf("I2C 初期化エラー！¥n");
-    exit(EXIT_FAILURE);
-  }
-  // 動作チェック機能を使った動作確認
-  if (check_bmp180_function(pd, fd) != CHECKOK) {
-    printf("BMP180 の動作確認が不良です。¥n");
-    exit(EXIT_FAILURE);
-  }
-  // printf("BMP180 の動作確認OK¥n¥n");
-  read_caldata(pd, fd, caldata);   // 補正データの読み出し
-  ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
-  up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
-  t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
-  // t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
-  printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
-  p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
-  // p = get_press(testut, testup, testoss,testcaldata);
-  // で補正の動作確認ができる
-  printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
-  // 最後に使用したI2C デバイスをクローズする
-  i2c_close(pd, fd);
-  // pigpiod との接続を終了する
-  pigpio_stop(pd);
-  return 0;
+    int pd; // pigpiod に接続したときの接続番号、クライアントの識別番号
+    int fd; // ハンドル値、I2C デバイスごとにつく識別番号
+    int oss = 1; // 気圧標準測定（2 回サンプリング平均）
+    int caldata[CALDATANUM]; // 補正データを格納する配列
+    int ut, up; // 生の温度・圧力値（ADC の変換結果そのもの）
+    int t, p;   // 補正した後の温度・圧力値
+    // 最初にpigpiod に接続する（NULL: localhost, NULL: default port）
+    pd = pigpio_start(NULL, NULL);
+    if (pd < 0) {
+        printf("pigpiod の接続に失敗しました。¥n");
+        printf("pigpiod が起動しているかどうか確認して下さい。¥n");
+        printf(" 毎回手動で起動する方法：sudo pigpiod¥n");
+        printf(" 自動的に起動させる方法：sudo systemctl enable "
+               "pigpiod.service; reboot");
+        exit(EXIT_FAILURE);
+    }
+    // I2C インタフェースの初期化
+    fd = i2c_open(pd, I2CBUS, BMP180ADDR, 0);
+    if (fd < 0) {
+        printf("I2C 初期化エラー！¥n");
+        exit(EXIT_FAILURE);
+    }
+    // 動作チェック機能を使った動作確認
+    if (check_bmp180_function(pd, fd) != CHECKOK) {
+        printf("BMP180 の動作確認が不良です。¥n");
+        exit(EXIT_FAILURE);
+    }
+    // printf("BMP180 の動作確認OK¥n¥n");
+    read_caldata(pd, fd, caldata);   // 補正データの読み出し
+    ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
+    up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
+    t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
+    // t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
+    printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
+    p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
+    // p = get_press(testut, testup, testoss,testcaldata);
+    // で補正の動作確認ができる
+    printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
+    // 最後に使用したI2C デバイスをクローズする
+    i2c_close(pd, fd);
+    // pigpiod との接続を終了する
+    pigpio_stop(pd);
+    return 0;
 }
 int get_press(int ut, int up, int oss, int *caldata)
 // 測定した温度と気圧データから、気圧の補正計算を行う関数
 // 戻り値は補正した気圧の値
 {
-  // アルゴリズムにしたがってプログラムを書く
-  return p;
+    // アルゴリズムにしたがってプログラムを書く
+    return p;
 }
 int get_temp(int ut, int *caldata)
 // 温度測定値と補正データを引数にとって補正した温度を求める関数
 // 戻り値は補正した温度（整数計算のため、真値の10 倍になっているはず）
 {
-  // アルゴリズムにしたがってプログラムを書く
-  return t;
+    // アルゴリズムにしたがってプログラムを書く
+    return t;
 }
 int get_raw_press(int pd, int fd, int oss)
 // 気圧の測定値を求める関数
 // oss で測定時の変換回数を指定する
 {
-  int m, l, x; // MSB, LSB, XLSB を入れる変数
-  int up;      // 計算して求めた値を入れる変数
-  // oss の範囲は0 から3 まで
-  if (oss < 0)
-    oss = 0;
-  if (oss > 3)
-    oss = 3;
-  wiringPiI2CWriteReg8(fd, CTRLREG, PRESS0 + (oss << 6)); // 変換開始
-  // 変換時間待ち、oss の値（変換回数=2^oss）によって待ち時間が異なる
-  // 時間待ちはtime_sleep( )関数を使用し、正しい引数を指定すること
-  switch (oss) {
-  case 0:
-    time_sleep();
-    break; // 5ms 待つ
-  case 1:
-    time_sleep();
-    break; // 8ms 待つ
-  case 2:
-    time_sleep();
-    break; // 14ms 待つ
-  default:
-    time_sleep(); // 26ms 待つ
-  }
-  // ここにデータレジスタからMSB, LSB, XLSB を読み出すコードを書く
-  // 気圧は3 バイトのデータ値から計算することになるので注意
-  m = ;
-  l = ;
-  x = ;
-  // ここに読み出したm, l, x から値を計算するコードを書く
-  up = ;
-  return up;
+    int m, l, x; // MSB, LSB, XLSB を入れる変数
+    int up;      // 計算して求めた値を入れる変数
+    // oss の範囲は0 から3 まで
+    if (oss < 0)
+        oss = 0;
+    if (oss > 3)
+        oss = 3;
+    wiringPiI2CWriteReg8(fd, CTRLREG, PRESS0 + (oss << 6)); // 変換開始
+    // 変換時間待ち、oss の値（変換回数=2^oss）によって待ち時間が異なる
+    // 時間待ちはtime_sleep( )関数を使用し、正しい引数を指定すること
+    switch (oss) {
+    case 0:
+        time_sleep();
+        break; // 5ms 待つ
+    case 1:
+        time_sleep();
+        break; // 8ms 待つ
+    case 2:
+        time_sleep();
+        break; // 14ms 待つ
+    default:
+        time_sleep(); // 26ms 待つ
+    }
+    // ここにデータレジスタからMSB, LSB, XLSB を読み出すコードを書く
+    // 気圧は3 バイトのデータ値から計算することになるので注意
+    m = ;
+    l = ;
+    x = ;
+    // ここに読み出したm, l, x から値を計算するコードを書く
+    up = ;
+    return up;
 }
 int get_raw_temp(int pd, int fd) {
-  int m, l; // 読み出したMSB, LSB を入れる変数
-  int ut;   // 計算で求めた測定温度を入れる変数
-  i2c_write_byte_data(pd, fd, CTRLREG, TEMP); // 温度の測定開始
-  time_sleep(); // 変換時間待ち、最大変換時間は4.5ms、引数を正しく指定
-  // ここにデータレジスタからMSB, LSB を読み出すコードを書く
-  // 気圧は2 バイトのデータ値から計算することになるので注意
-  m = ;
-  l = ;
-  // ここに読み出したm, l から値を計算するコードを書く
-  ut = ;
-  return ut;
+    int m, l; // 読み出したMSB, LSB を入れる変数
+    int ut;   // 計算で求めた測定温度を入れる変数
+    i2c_write_byte_data(pd, fd, CTRLREG, TEMP); // 温度の測定開始
+    time_sleep(); // 変換時間待ち、最大変換時間は4.5ms、引数を正しく指定
+    // ここにデータレジスタからMSB, LSB を読み出すコードを書く
+    // 気圧は2 バイトのデータ値から計算することになるので注意
+    m = ;
+    l = ;
+    // ここに読み出したm, l から値を計算するコードを書く
+    ut = ;
+    return ut;
 }
 int check_bmp180_function(int pd, int fd)
 // BMP180 の機能チェックを行う関数
 {
-  int r;
-  if (i2c_read_byte_data(pd, fd, IDREG) == 0x55)
-    r = CHECKOK;
-  else
-    r = CHECKNG;
-  return r;
+    int r;
+    if (i2c_read_byte_data(pd, fd, IDREG) == 0x55)
+        r = CHECKOK;
+    else
+        r = CHECKNG;
+    return r;
 }
 int *read_caldata(int pd, int fd, int *caldata)
 // キャリブレーションデータの読み出し関数
 {
-  int i;
-  int l, m;
-  // printf("キャリブレーション値を読み込みます。¥n");
-  for (i = 0; i < CALDATANUM; i++) {
-    m = i2c_read_byte_data(pd, fd, CALSADR + i * 2);
-    l = i2c_read_byte_data(pd, fd, CALSADR + i * 2 + 1);
-    caldata[i] = (m << 8) + l; // 符号なし16 ビットに変換
-    if ((i != AC4) && (i != AC5) && (i != AC6)) {
-      // AC4, AC5, AC6 以外は符号付き16 ビットデータなので対処が必要
-      // その対処をここに書く
+    int i;
+    int l, m;
+    // printf("キャリブレーション値を読み込みます。¥n");
+    for (i = 0; i < CALDATANUM; i++) {
+        m = i2c_read_byte_data(pd, fd, CALSADR + i * 2);
+        l = i2c_read_byte_data(pd, fd, CALSADR + i * 2 + 1);
+        caldata[i] = (m << 8) + l; // 符号なし16 ビットに変換
+        if ((i != AC4) && (i != AC5) && (i != AC6)) {
+            // AC4, AC5, AC6 以外は符号付き16 ビットデータなので対処が必要
+            // その対処をここに書く
+        }
     }
-  }
-  return caldata;
+    return caldata;
 }
