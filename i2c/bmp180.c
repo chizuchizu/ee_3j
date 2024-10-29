@@ -206,7 +206,7 @@ int *read_caldata(int pd, int fd, int *caldata)
         if ((i != AC4) && (i != AC5) && (i != AC6)) {
             // AC4, AC5, AC6 以外は符号付き16 ビットデータなので対処が必要
             // その対処をここに書く
-	    // caldata[i] = ~caldata[i] + 1;
+	    caldata[i] = ~caldata[i] + 1;
         }
     }
     return caldata;
