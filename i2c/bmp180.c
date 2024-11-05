@@ -108,11 +108,12 @@ int main() {
     read_caldata(pd, fd, caldata);   // 補正データの読み出し
     ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
     printf("%d\n", ut);
-    // up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
-    // t = get_temp(testut, testcaldata);
+    up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
     t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
+    // t = get_temp(testut, testcaldata);
     // :t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
     printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
+    printf("up: %d\n", up);
     // p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
     // // p = get_press(testut, testup, testoss,testcaldata);
     // // で補正の動作確認ができる
@@ -123,70 +124,97 @@ int main() {
     pigpio_stop(pd);
     return 0;
 }
-// int get_press(int ut, int up, int oss, int *caldata)
-// // 測定した温度と気圧データから、気圧の補正計算を行う関数
-// // 戻り値は補正した気圧の値
-// {
-//     // アルゴリズムにしたがってプログラムを書く
-//     return p;
-// }
+int get_press(int ut, int up, int oss, int *caldata)
+// 測定した温度と気圧データから、気圧の補正計算を行う関数
+// 戻り値は補正した気圧の値
+{
+    // アルゴリズムにしたがってプログラムを書く
+    int X1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
+    int X2 = (caldata[MC] << 11) / (X1 + caldata[MD]);
+    int B5 = X1 + X2;
+    int B6 = caldata[B5] - 4000;
+    X1 = (caldata[B2] * (B6 * B6 >> 12)) >> 11;
+    X2  = caldata[AC2] * B6 >> 11;
+    int X3 = X1 + X2;
+    int B3 
+	    // WIP
+    int B4 = caldata[AC4] * (unsigned long)(X3 + 32768) >> 15;
+    int B7 = ((unsigned long)up - B3) * (50000 >> oss);
+    int p;
+    if (B7 < 0x80000000){
+	p = B7 * 2 / B4;
+    } else {
+	p = (B7 / B4) * 2;
+    }
+    X1 = (p >> 8) * (p >> 8);
+    X1 = (X1 * 3038) >> 16;
+    X3 = (-7357 * p) >> 16;
+    p = p + (X1 + X2 + 3791) >> 4;
+    return p;
+}
 int get_temp(int ut, int *caldata)
 // 温度測定値と補正データを引数にとって補正した温度を求める関数
 // 戻り値は補正した温度（整数計算のため、真値の10 倍になっているはず）
 {
     // アルゴリズムにしたがってプログラムを書く
-    int x1 = ((ut - caldata[5]) * caldata[4]) >> 15;
+    int x1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
     printf("x1: %d\n", x1);
-    int x2 = (caldata[9] << 11) / (x1 + caldata[10]);
+    int x2 = (caldata[MC] << 11) / (x1 + caldata[MD]);
     printf("x2: %d\n", x2);
     int b5 = x1 + x2;
     printf("b5: %d\n", b5);
     int t = (b5 + 8) >> 4;
     printf("t: %d\n", t);
+    printf("ut: %d\n", ut);
     printf("ac1: %d\n", caldata[0]);
     printf("ac2: %d\n", caldata[1]);
     printf("ac3: %d\n", caldata[2]);
     printf("ac4: %d\n", caldata[3]);
     printf("ac5: %d\n", caldata[4]);
-    printf("ac6: %d\n", caldata[5]);
+    printf("ac6: %d \n", caldata[5]);
+    printf("b1: %d \n", caldata[6]);
+    printf("b2: %d \n", caldata[7]);
+    printf("mb: %d \n", caldata[8]);
+    printf("mc: %d \n", caldata[9]);
+    printf("md: %d \n", caldata[10]);
     return t;
 }
-// int get_raw_press(int pd, int fd, int oss)
-// // 気圧の測定値を求める関数
-// // oss で測定時の変換回数を指定する
-// {
-//     int m, l, x; // MSB, LSB, XLSB を入れる変数
-//     int up;      // 計算して求めた値を入れる変数
-//     // oss の範囲は0 から3 まで
-//     if (oss < 0)
-//         oss = 0;
-//     if (oss > 3)
-//         oss = 3;
-//     wiringPiI2CWriteReg8(fd, CTRLREG, PRESS0 + (oss << 6)); // 変換開始
-//     // 変換時間待ち、oss の値（変換回数=2^oss）によって待ち時間が異なる
-//     // 時間待ちはtime_sleep( )関数を使用し、正しい引数を指定すること
-//     switch (oss) {
-//     case 0:
-//         time_sleep();
-//         break; // 5ms 待つ
-//     case 1:
-//         time_sleep();
-//         break; // 8ms 待つ
-//     case 2:
-//         time_sleep();
-//         break; // 14ms 待つ
-//     default:
-//         time_sleep(); // 26ms 待つ
-//     }
-//     // ここにデータレジスタからMSB, LSB, XLSB を読み出すコードを書く
-//     // 気圧は3 バイトのデータ値から計算することになるので注意
-//     m = ;
-//     l = ;
-//     x = ;
-//     // ここに読み出したm, l, x から値を計算するコードを書く
-//     up = ;
-//     return up;
-// }
+int get_raw_press(int pd, int fd, int oss)
+// 気圧の測定値を求める関数
+// oss で測定時の変換回数を指定する
+{
+    int m, l, x; // MSB, LSB, XLSB を入れる変数
+    int up;      // 計算して求めた値を入れる変数
+    // oss の範囲は0 から3 まで
+    if (oss < 0)
+        oss = 0;
+    if (oss > 3)
+        oss = 3;
+    // wiringPiI2CWriteReg8(fd, CTRLREG, PRESS0 + (oss << 6)); // 変換開始
+    // 変換時間待ち、oss の値（変換回数=2^oss）によって待ち時間が異なる
+    // 時間待ちはtime_sleep( )関数を使用し、正しい引数を指定すること
+    switch (oss) {
+    case 0:
+        time_sleep(0.005);
+        break; // 5ms 待つ
+    case 1:
+        time_sleep(0.008);
+        break; // 8ms 待つ
+    case 2:
+        time_sleep(0.014);
+        break; // 14ms 待つ
+    default:
+        time_sleep(0.026); // 26ms 待つ
+    }
+    // ここにデータレジスタからMSB, LSB, XLSB を読み出すコードを書く
+    // 気圧は3 バイトのデータ値から計算することになるので注意
+    m = i2c_read_byte_data(pd, fd, DATAMSB);
+    l = i2c_read_byte_data(pd, fd, DATALSB);
+    x = i2c_read_byte_data(pd, fd, DATAXLSB);
+    // ここに読み出したm, l, x から値を計算するコードを書く
+    up = (m << 16 + l << 8 + x) >> (8 - oss);
+    return up;
+}
 int get_raw_temp(int pd, int fd) {
     int m, l; // 読み出したMSB, LSB を入れる変数
     int ut;   // 計算で求めた測定温度を入れる変数
@@ -194,8 +222,8 @@ int get_raw_temp(int pd, int fd) {
     time_sleep(0.045); // 変換時間待ち、最大変換時間は4.5ms、引数を正しく指定
     // ここにデータレジスタからMSB, LSB を読み出すコードを書く
     // 気圧は2 バイトのデータ値から計算することになるので注意
-    m = i2c_read_byte_data(pd, fd, 0xf6);
-    l = i2c_read_byte_data(pd, fd, 0xf7);
+    m = i2c_read_byte_data(pd, fd, DATAMSB);
+    l = i2c_read_byte_data(pd, fd, DATALSB);
     // ここに読み出したm, l から値を計算するコードを書く
     ut = (m << 8) + l;
     return ut;
@@ -223,12 +251,25 @@ int *read_caldata(int pd, int fd, int *caldata)
         if ((i != AC4) && (i != AC5) && (i != AC6)) {
             // AC4, AC5, AC6 以外は符号付き16 ビットデータなので対処が必要
             // その対処をここに書く
-	    // caldata[i] = ~caldata[i] + 1;
-	    caldata[i] = (m << 8) + l;
-	    caldata[i] = (int)~(short)caldata[i];
-	    caldata[i] = caldata[i];
+            short tmp = (m << 8) + l;
+            if (tmp < 0){
+            	tmp *= -1;
+            	caldata[i] = (int)tmp;
+            	caldata[i] *= -1;
+            }
+	    // if (caldata[i] & 0x00008000 == 0x00008000){
+
+	    //     // printf("hit %x\n", caldata[i]);
+            //     // // caldata[i] = 0xFFFFFFFF & caldata[i];
+	    //     // caldata[i] = 0xFFFF0000 | caldata[i];
+	    //     // caldata[i] = ~caldata[i] + 1;
+	    // }
+	    // caldata[i] = (int)~(short)caldata[i];
+	    // caldata[i] = caldata[i];
 	    printf("%x %x %x\n", m, l, caldata[i]);
         }
     }
     return caldata;
 }
+// m: 1000 1000 | l: 1000 1000
+// 1000 1000 1000 1000
