@@ -107,17 +107,17 @@ int main() {
     // caldata: AC1 ~ 6, B1, B2, MB, MC, MD
     read_caldata(pd, fd, caldata);   // 補正データの読み出し
     ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
-    printf("%d\n", ut);
     up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
     t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
     // t = get_temp(testut, testcaldata);
     // :t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
     printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
     printf("up: %d\n", up);
-    // p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
-    // // p = get_press(testut, testup, testoss,testcaldata);
+    printf("ut: %d\n", ut);
+    p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
+    // p = get_press(testut, testup, testoss,testcaldata);
     // // で補正の動作確認ができる
-    // printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
+    printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
     // 最後に使用したI2C デバイスをクローズする
     i2c_close(pd, fd);
     // pigpiod との接続を終了する
@@ -128,28 +128,52 @@ int get_press(int ut, int up, int oss, int *caldata)
 // 測定した温度と気圧データから、気圧の補正計算を行う関数
 // 戻り値は補正した気圧の値
 {
+    printf("============== get_press ====================\n");
     // アルゴリズムにしたがってプログラムを書く
-    int X1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
+    int X1 = ((ut - caldata[AC6]) * caldata[AC5]) >> 15;
+    printf("X1: %d\n", X1);
     int X2 = (caldata[MC] << 11) / (X1 + caldata[MD]);
+    printf("X2: %d\n", X2);
     int B5 = X1 + X2;
-    int B6 = caldata[B5] - 4000;
+    printf("B5: %d\n", B5);
+    int B6 = B5 - 4000;
+    // int x1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
+    printf("B6: %d\n", B6);
     X1 = (caldata[B2] * (B6 * B6 >> 12)) >> 11;
+    printf("X1: %d\n", X1);
     X2  = caldata[AC2] * B6 >> 11;
+    printf("X2: %d\n", X2);
     int X3 = X1 + X2;
-    int B3 
-	    // WIP
-    int B4 = caldata[AC4] * (unsigned long)(X3 + 32768) >> 15;
-    int B7 = ((unsigned long)up - B3) * (50000 >> oss);
+    printf("X3: %d\n", X3);
+    int B3 = (((caldata[AC1] * 4 + X3) << oss) + 2) / 4;
+    printf("B3: %d\n", B3);
+    X1 = caldata[AC3] * B6 >> 13;
+    printf("X1: %d\n", X1);
+    X2 = (B1 * (B6 * B6 >> 12)) >> 16;
+    printf("X2: %d\n", X2);
+    X3 = ((X1 + X2) + 2) >> 2;
+    printf("X3: %d\n", X3);
+
+    unsigned int B4 = caldata[AC4] * (unsigned long)(X3 + 32768) >> 15;
+    printf("B4: %d\n", B4);
+    unsigned int B7 = ((unsigned long)up - B3) * (50000 >> oss);
+    printf("B7: %d\n", B7);
+
     int p;
     if (B7 < 0x80000000){
-	p = B7 * 2 / B4;
+	p = (B7 * 2) / B4;
     } else {
 	p = (B7 / B4) * 2;
     }
+    printf("p: %d\n", p);
     X1 = (p >> 8) * (p >> 8);
+    printf("x1: %d\n", X1);
     X1 = (X1 * 3038) >> 16;
+    printf("x1: %d\n", X1);
     X3 = (-7357 * p) >> 16;
-    p = p + (X1 + X2 + 3791) >> 4;
+    printf("x3: %d\n", X3);
+    p = p + ((X1 + X2 + 3791) >> 4);
+    printf("p: %d\n", p);
     return p;
 }
 int get_temp(int ut, int *caldata)
@@ -157,13 +181,15 @@ int get_temp(int ut, int *caldata)
 // 戻り値は補正した温度（整数計算のため、真値の10 倍になっているはず）
 {
     // アルゴリズムにしたがってプログラムを書く
-    int x1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
+    int x1 = ((ut - caldata[AC6]) * caldata[AC5]) >> 15;
     printf("x1: %d\n", x1);
     int x2 = (caldata[MC] << 11) / (x1 + caldata[MD]);
     printf("x2: %d\n", x2);
     int b5 = x1 + x2;
     printf("b5: %d\n", b5);
     int t = (b5 + 8) >> 4;
+    
+    printf("============== get_temp ====================\n");
     printf("t: %d\n", t);
     printf("ut: %d\n", ut);
     printf("ac1: %d\n", caldata[0]);
@@ -191,6 +217,7 @@ int get_raw_press(int pd, int fd, int oss)
     if (oss > 3)
         oss = 3;
     // wiringPiI2CWriteReg8(fd, CTRLREG, PRESS0 + (oss << 6)); // 変換開始
+    i2c_write_byte_data(pd, fd, CTRLREG, PRESS0 + (oss << 6)); // 温度の測定開始
     // 変換時間待ち、oss の値（変換回数=2^oss）によって待ち時間が異なる
     // 時間待ちはtime_sleep( )関数を使用し、正しい引数を指定すること
     switch (oss) {
@@ -212,7 +239,7 @@ int get_raw_press(int pd, int fd, int oss)
     l = i2c_read_byte_data(pd, fd, DATALSB);
     x = i2c_read_byte_data(pd, fd, DATAXLSB);
     // ここに読み出したm, l, x から値を計算するコードを書く
-    up = (m << 16 + l << 8 + x) >> (8 - oss);
+    up = ((m << 16) + (l << 8) + x) >> (8 - oss);
     return up;
 }
 int get_raw_temp(int pd, int fd) {
