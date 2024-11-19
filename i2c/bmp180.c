@@ -1,5 +1,6 @@
 #include <pigpiod_if2.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 // コンパイル方法（bmp180.c をコンパイルして bmp180 を生成する例）
@@ -58,6 +59,24 @@
 // BMP180 の機能チェック用
 #define CHECKOK 0
 #define CHECKNG -1
+#define D1 26
+#define D2 21
+#define D3 20
+#define D4 18
+#define SEG_A 24
+#define SEG_B 19
+#define SEG_C 16
+#define SEG_D 12
+#define SEG_E 6
+#define SEG_F 23
+#define SEG_G 17
+#define SEG_DP 13
+
+const int SEG_PINS[8] = {SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G, SEG_DP};
+const int D_PINS[4] = {D1, D2, D3, D4};
+
+int display_data[4] = {1, 2, 3, 4};
+int pd;
 // キャリブレーションレジスタ名のテーブル
 const char *calregname[11] = {"AC1", "AC2", "AC3", "AC4", "AC5", "AC6",
                               "B1",  "B2",  "MB",  "MC",  "MD"};
@@ -75,6 +94,54 @@ int get_raw_press(int pd, int fd, int oss);
 int get_raw_temp(int pd, int fd);
 int check_bmp180_function(int pd, int fd);
 int *read_caldata(int pd, int fd, int *caldata);
+
+int seg_map[10][8] = {
+ //  A  B  C  D  E  F  G  DP 
+    {0, 0, 0, 0, 0, 0, 1, 1}, // 0
+    {1, 0, 0, 1, 1, 1, 1, 1}, // 1
+    {0, 0, 1, 0, 0, 1, 0, 1}, // 2
+    {0, 0, 0, 0, 1, 1, 0, 1}, // 3
+    {1, 0, 0, 1, 1, 0, 0, 1}, // 4
+    {0, 1, 0, 0, 1, 0, 0, 1}, // 5
+    {0, 1, 0, 0, 0, 0, 0, 1}, // 6
+    {0, 0, 0, 1, 1, 0, 1, 1}, // 7
+    {0, 0, 0, 0, 0, 0, 0, 1}, // 8
+    {0, 0, 0, 1, 1, 0, 0, 1}, // 9
+};
+
+void init(int pd){
+    set_mode(pd, D1, PI_OUTPUT);
+    set_mode(pd, D2, PI_OUTPUT);
+    set_mode(pd, D3, PI_OUTPUT);
+    set_mode(pd, D4, PI_OUTPUT);
+    set_mode(pd, SEG_A, PI_OUTPUT);
+    set_mode(pd, SEG_B, PI_OUTPUT);
+    set_mode(pd, SEG_C, PI_OUTPUT);
+    set_mode(pd, SEG_D, PI_OUTPUT);
+    set_mode(pd, SEG_E, PI_OUTPUT);
+    set_mode(pd, SEG_F, PI_OUTPUT);
+    set_mode(pd, SEG_G, PI_OUTPUT);
+    set_mode(pd, SEG_DP, PI_OUTPUT);
+}
+
+void *display_thread(void *arg){
+    while (1){
+        for (int digit = 0; digit < 4; digit++){
+	    printf("%d %d %d %d\n", display_data[0], display_data[1], display_data[2], display_data[3]);
+
+	    for (int i = 0; i < 4; i++){
+	        gpio_write(pd, D_PINS[i], 0);
+	    }
+	    for (int i = 0; i < 8; i++){
+	        gpio_write(pd, SEG_PINS[i], seg_map[display_data[digit]][i]);
+	    }
+	    time_sleep(0.001);
+	    gpio_write(pd, D_PINS[digit], 1);
+
+	    time_sleep(0.001);
+	}
+    }
+}
 int main() {
     int pd; // pigpiod に接続したときの接続番号、クライアントの識別番号
     int fd; // ハンドル値、I2C デバイスごとにつく識別番号
@@ -84,6 +151,9 @@ int main() {
     int t, p;   // 補正した後の温度・圧力値
     // 最初にpigpiod に接続する（NULL: localhost, NULL: default port）
     pd = pigpio_start(NULL, NULL);
+
+    pthread_t thread;
+    pthread_create(&thread, NULL, display_thread, NULL);
     if (pd < 0) {
         printf("pigpiod の接続に失敗しました。¥n");
         printf("pigpiod が起動しているかどうか確認して下さい。¥n");
@@ -105,19 +175,32 @@ int main() {
     }
     // printf("BMP180 の動作確認OK¥n¥n");
     // caldata: AC1 ~ 6, B1, B2, MB, MC, MD
-    read_caldata(pd, fd, caldata);   // 補正データの読み出し
-    ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
-    up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
-    t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
-    // t = get_temp(testut, testcaldata);
-    // :t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
-    printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
-    printf("up: %d\n", up);
-    printf("ut: %d\n", ut);
-    p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
-    // p = get_press(testut, testup, testoss,testcaldata);
-    // // で補正の動作確認ができる
-    printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
+    while (1){
+	    read_caldata(pd, fd, caldata);   // 補正データの読み出し
+	    ut = get_raw_temp(pd, fd);       // 温度測定値の読み出し
+	    up = get_raw_press(pd, fd, oss); // 気圧測定値の読み出し
+	    t = get_temp(ut, caldata); // 補正計算を行って補正した温度を求める
+	    // t = get_temp(testut, testcaldata);
+	    // :t = get_temp(testut, testcaldata); のようにすると補正の動作確認ができる
+
+	    printf("気温（補正済み） = %4.1f ℃, ", (float)t / 10.0);
+	    printf("up: %d\n", up);
+	    printf("ut: %d\n", ut);
+	    p = get_press(ut, up, oss, caldata); // 補正計算を行って補正した気圧を求める
+	    // p = get_press(testut, testup, testoss,testcaldata);
+	    // // で補正の動作確認ができる
+	    printf("気圧（補正済み） = %6.2f hPa¥n", (float)p / 100.0);
+	    int tmp;
+	    int press = (float)p / 100.0;
+	    tmp = press;
+	    display_data[0] = tmp / 1000;
+	    tmp %= 1000;
+	    display_data[1] = tmp / 100;
+	    tmp %= 100;
+	    display_data[2] = tmp / 10;
+	    tmp %= 10;
+	    display_data[3] = tmp;
+    }
     // 最後に使用したI2C デバイスをクローズする
     i2c_close(pd, fd);
     // pigpiod との接続を終了する
@@ -131,33 +214,33 @@ int get_press(int ut, int up, int oss, int *caldata)
     printf("============== get_press ====================\n");
     // アルゴリズムにしたがってプログラムを書く
     int X1 = ((ut - caldata[AC6]) * caldata[AC5]) >> 15;
-    printf("X1: %d\n", X1);
+    // printf("X1: %d\n", X1);
     int X2 = (caldata[MC] << 11) / (X1 + caldata[MD]);
-    printf("X2: %d\n", X2);
+    // printf("X2: %d\n", X2);
     int B5 = X1 + X2;
-    printf("B5: %d\n", B5);
+    // printf("B5: %d\n", B5);
     int B6 = B5 - 4000;
     // int x1 = ((ut - caldata[AC6]) * caldata[AC4]) >> 15;
-    printf("B6: %d\n", B6);
+    // printf("B6: %d\n", B6);
     X1 = (caldata[B2] * (B6 * B6 >> 12)) >> 11;
-    printf("X1: %d\n", X1);
+    // printf("X1: %d\n", X1);
     X2  = caldata[AC2] * B6 >> 11;
-    printf("X2: %d\n", X2);
+    // printf("X2: %d\n", X2);
     int X3 = X1 + X2;
-    printf("X3: %d\n", X3);
+    // printf("X3: %d\n", X3);
     int B3 = (((caldata[AC1] * 4 + X3) << oss) + 2) / 4;
-    printf("B3: %d\n", B3);
+    // printf("B3: %d\n", B3);
     X1 = caldata[AC3] * B6 >> 13;
-    printf("X1: %d\n", X1);
+    // printf("X1: %d\n", X1);
     X2 = (B1 * (B6 * B6 >> 12)) >> 16;
-    printf("X2: %d\n", X2);
+    // printf("X2: %d\n", X2);
     X3 = ((X1 + X2) + 2) >> 2;
-    printf("X3: %d\n", X3);
+    // printf("X3: %d\n", X3);
 
     unsigned int B4 = caldata[AC4] * (unsigned long)(X3 + 32768) >> 15;
-    printf("B4: %d\n", B4);
+    // printf("B4: %d\n", B4);
     unsigned int B7 = ((unsigned long)up - B3) * (50000 >> oss);
-    printf("B7: %d\n", B7);
+    // printf("B7: %d\n", B7);
 
     int p;
     if (B7 < 0x80000000){
@@ -165,15 +248,15 @@ int get_press(int ut, int up, int oss, int *caldata)
     } else {
 	p = (B7 / B4) * 2;
     }
-    printf("p: %d\n", p);
+    // printf("p: %d\n", p);
     X1 = (p >> 8) * (p >> 8);
-    printf("x1: %d\n", X1);
+    // printf("x1: %d\n", X1);
     X1 = (X1 * 3038) >> 16;
-    printf("x1: %d\n", X1);
+    // printf("x1: %d\n", X1);
     X3 = (-7357 * p) >> 16;
-    printf("x3: %d\n", X3);
+    // printf("x3: %d\n", X3);
     p = p + ((X1 + X2 + 3791) >> 4);
-    printf("p: %d\n", p);
+    // printf("p: %d\n", p);
     return p;
 }
 int get_temp(int ut, int *caldata)
