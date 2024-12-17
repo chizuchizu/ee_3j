@@ -49,9 +49,12 @@ int ad_read(int pd, int fd, int ch){
   unsigned char wdata[3], rdata[3];
   int val;
 
-  wdata[0] = 0x01;
-  wdata[1] = 0x80;
-  // printf("1!\n");
+  wdata[0] = 0x1;
+  wdata[1] = 128;
+  printf("wdata=============\n");
+  printf("%d\n", wdata[0]);
+  printf("%d\n", wdata[1]);
+  printf("%d\n", wdata[2]);
   spi_xfer(pd, fd, wdata, rdata, 3);
   // printf("2!\n");
   // printf("%x\n", rdata[0]);
